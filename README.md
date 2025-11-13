@@ -1,0 +1,10 @@
+# Benchmarking Foundation Models for Mitotic Figure Classification
+
+This repository will host the code that was used for our paper **"Benchmarking Foundation Models for Mitotic Figure Classification"**.
+
+## Abstract 
+The performance of deep learning models is known to scale with data quantity and diversity. In pathology, as in many other medical imaging domains, the availability of labeled images for a specific task is often limited. Self-supervised learning techniques have enabled the use of vast amounts of unlabeled data to train large-scale neural networks, i.e., foundation models, that can address the limited data problem by providing semantically rich feature vectors that can generalize well to new tasks with minimal training effort increasing model performance and robustness. In this work, we investigate the use of foundation models for mitotic figure classification. The mitotic count, which can be derived from this classification task, is an independent prognostic marker for specific tumors and part of certain tumor grading systems. In particular, we investigate the data scaling laws on multiple current foundation models and evaluate their robustness to unseen tumor domains. Next to the commonly used linear probing paradigm, we also adapt the models using low-rank adaptation (LoRA) of their attention mechanisms. We compare all models against end-to-end-trained baselines, both CNNs and Vision Transformers. Our results demonstrate that LoRA-adapted foundation models provide superior performance to those adapted with standard linear probing, reaching performance levels close to 100 % data availability with only 10 % of training data. Furthermore, LoRA-adaptation of the most recent foundation models almost closes the out-of-domain performance gap when evaluated on unseen tumor domains. However, full fine-tuning of traditional architectures still yields competitive performance.
+
+
+## Code Availability
+The code will be released here soon. 
