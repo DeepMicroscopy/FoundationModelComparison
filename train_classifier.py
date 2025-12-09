@@ -1,25 +1,22 @@
 """
-Tumor-specific training script for mitotic figure classification models.
+Training script for mitotic figure classification models.
 
-This script trains separate classifiers for each tumor type in the dataset with
-leave-one-tumor-type-out evaluation. For each tumor type:
-    - Training: samples from that tumor type (minus validation/test splits)
-    - Testing: held-out samples from that tumor type + all samples from other types
-
-Features:
-    - Multiple random seeds for cross-validation
+This script trains a classifier on histopathology patches with support for:
+    - Multiple training data fractions 
+    - Multiple random seeds for monte-carlo cross-validation
     - Early stopping and learning rate scheduling
-    - LoRA fine-tuning support
+    - LoRA fine-tuning
     - Data augmentation
     - TensorBoard logging
 
 Example:
-    python train_tumor_specific.py \
+    python train_classifier.py \
         --path_to_csv_file /path/to/data.csv \
         --image_dir /path/to/images \
         --checkpoint_path /path/to/checkpoints \
-        --exp_code tumor_specific_exp \
-        --model_name resnet50
+        --exp_code experiment_name \
+        --model_name resnet50 \
+        --train_sizes 0.01,0.1,1.0
 """
 
 import argparse
@@ -52,6 +49,7 @@ PSEUDO_EPOCH_LENGTH = 1280
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 20
+TRAIN_SIZES = [0.001, 0.01, 0.1, 1.0]
 SEEDS = [42, 43, 44, 45, 46]
 
 # Configure logger
@@ -71,7 +69,7 @@ def parse_args() -> argparse.Namespace:
         argparse.Namespace: Parsed arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Train tumor-specific classifiers on histopathology patches."
+        description="Train a classifier on histopathology patches."
     )
 
     # Required arguments
@@ -79,7 +77,7 @@ def parse_args() -> argparse.Namespace:
         "--path_to_csv_file",
         type=str,
         required=True,
-        help="Path to CSV file containing dataset information (must include 'tumortype' column).",
+        help="Path to CSV file containing dataset information.",
     )
     parser.add_argument(
         "--image_dir",
@@ -98,7 +96,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--exp_code",
         type=str,
-        default="tumor_specific_experiment",
+        default="default_experiment",
         help="Experiment code/name for organizing results.",
     )
     parser.add_argument(
@@ -127,6 +125,20 @@ def parse_args() -> argparse.Namespace:
         default=LEARNING_RATE,
         help=f"Learning rate (default: {LEARNING_RATE}).",
     )
+    parser.add_argument(
+        "--train_sizes",
+        nargs="+",
+        type=float,
+        default=TRAIN_SIZES,
+        help=f"Comma-separated list of training data fractions (e.g., {TRAIN_SIZES}).",
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        default=SEEDS,
+        help=f"Seeds to indicate how many repititions per configuration (e.g. {SEEDS})."
+    )
 
     # Data configuration
     parser.add_argument(
@@ -139,7 +151,7 @@ def parse_args() -> argparse.Namespace:
         "--test_portion",
         type=float,
         default=TEST_PORTION,
-        help=f"Fraction of data to use for testing/validation (default: {TEST_PORTION}).",
+        help=f"Fraction of data to use for testing (default: {TEST_PORTION}).",
     )
     parser.add_argument(
         "--pseudo_epoch_length",
@@ -152,13 +164,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=NUM_WORKERS,
         help=f"Number of DataLoader workers (default: {NUM_WORKERS}).",
-    )
-    parser.add_argument(
-        "--seeds",
-        nargs="+",
-        type=int,
-        default=SEEDS,
-        help=f"Seeds to indicate how many repititions per configuration (e.g. {SEEDS})."
     )
 
     # Regularization and optimization
@@ -228,21 +233,57 @@ def save_args_to_yaml(args: argparse.Namespace, output_path: Path) -> None:
         yaml.dump(vars(args), f, default_flow_style=False, sort_keys=False)
 
 
-def split_dataset_by_tumor_type(
+def print_model_parameters(model: torch.nn.Module, model_name: str = "Model") -> None:
+    """Print detailed information about model parameters.
+
+    Args:
+        model (torch.nn.Module): PyTorch model.
+        model_name (str, optional): Name to display in output. Defaults to "Model".
+    """
+    trainable_params = 0
+    non_trainable_params = 0
+    total_params = 0
+
+    logger.info("=" * 70)
+    logger.info("%s Parameter Summary", model_name)
+    logger.info("=" * 70)
+
+    for param in model.parameters():
+        param_count = param.numel()
+        total_params += param_count
+        if param.requires_grad:
+            trainable_params += param_count
+        else:
+            non_trainable_params += param_count
+
+    trainable_pct = (trainable_params / total_params * 100) if total_params > 0 else 0
+    non_trainable_pct = (
+        (non_trainable_params / total_params * 100) if total_params > 0 else 0
+    )
+
+    logger.info("Trainable params:     %12s (%6.2f%%)", f"{trainable_params:,}", trainable_pct)
+    logger.info("Non-trainable params: %12s (%6.2f%%)", f"{non_trainable_params:,}", non_trainable_pct)
+    logger.info("Total params:         %12s", f"{total_params:,}")
+
+    # Memory estimation
+    param_size_mb = total_params * 4 / (1024**2)  # float32
+    logger.info("Estimated size (FP32): %.2f MB", param_size_mb)
+    logger.info("Estimated size (FP16): %.2f MB", param_size_mb / 2)
+    logger.info("=" * 70)
+
+
+def split_dataset(
     df: pd.DataFrame,
-    tumor_type: str,
+    train_size: float,
     test_portion: float,
     seed: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Split dataset for tumor-specific training.
-
-    Training set: samples from the specified tumor type (minus validation/test).
-    Test set: held-out samples from the specified tumor type + all samples from other types.
+    """Split dataset into train, validation, and test sets.
 
     Args:
-        df (pd.DataFrame): Full dataset with 'tumortype' column.
-        tumor_type (str): Tumor type to train on.
-        test_portion (float): Fraction of tumor-type samples to hold out for testing.
+        df (pd.DataFrame): Full dataset.
+        train_size (float): Fraction of data to use for training (after test split).
+        test_portion (float): Fraction of data to use for testing.
         seed (int): Random seed for reproducibility.
 
     Returns:
@@ -250,35 +291,32 @@ def split_dataset_by_tumor_type(
     """
     np.random.seed(seed)
 
-    # Get all samples of the specified tumor type
-    tumor_type_df = df[df["tumortype"] == tumor_type]
-    other_types_df = df[df["tumortype"] != tumor_type]
+    # Split test set
+    test_indices = np.random.choice(
+        df.index, size=int(len(df) * test_portion), replace=False
+    )
+    test_df = df.loc[test_indices]
+    remaining_df = df.drop(test_indices)
 
-    # Sample test set from the specified tumor type
-    test_from_tumor = tumor_type_df.sample(frac=test_portion, replace=False, random_state=seed)
+    # Select training samples based on train_size
+    train_indices = np.random.choice(
+        remaining_df.index, size=int(len(remaining_df) * train_size), replace=False
+    )
+    train_df = remaining_df.loc[train_indices]
 
-    # Test set includes: held-out samples from tumor type + all other tumor types
-    test_df = pd.concat([test_from_tumor, other_types_df])
-
-    # Remaining samples from tumor type are for training
-    remaining_tumor_df = tumor_type_df.drop(test_from_tumor.index)
-
-    # Split validation set from remaining tumor samples
-    val_df = remaining_tumor_df.sample(frac=test_portion, replace=False, random_state=seed)
-    train_df = remaining_tumor_df.drop(val_df.index)
+    # Split validation set from training set
+    val_indices = np.random.choice(
+        train_df.index, size=int(len(train_df) * test_portion), replace=False
+    )
+    val_df = train_df.loc[val_indices]
+    train_df = train_df.drop(val_indices)
 
     # Verify no overlaps
     assert len(set(train_df.index) & set(val_df.index)) == 0, "Train/val overlap detected"
     assert len(set(train_df.index) & set(test_df.index)) == 0, "Train/test overlap detected"
     assert len(set(val_df.index) & set(test_df.index)) == 0, "Val/test overlap detected"
 
-    logger.info(
-        "Dataset split for tumor type '%s' - Train: %d, Val: %d, Test: %d",
-        tumor_type,
-        len(train_df),
-        len(val_df),
-        len(test_df),
-    )
+    logger.info("Dataset split - Train: %d, Val: %d, Test: %d", len(train_df), len(val_df), len(test_df))
 
     return train_df, val_df, test_df
 
@@ -319,7 +357,6 @@ def create_dataloaders(
     else:
         train_transform = base_transform
         logger.info("Data augmentation disabled")
-
 
     # Create datasets
     train_ds = base_dataset.return_split(
@@ -399,11 +436,16 @@ def train_one_epoch(
     total = 0
 
     for images, labels in tqdm(train_loader, desc="Training", leave=False):
-        images = images.to(model.device if hasattr(model, "device") else "cuda")
-        labels = labels.to(model.device if hasattr(model, "device") else "cuda")
+        images = images.to(model.device if hasattr(model, 'device') else 'cuda')
+        labels = labels.to(model.device if hasattr(model, 'device') else 'cuda')
 
         optimizer.zero_grad()
         logits, _, y_hat = model(images)
+
+        # Handle single-sample batches
+        if y_hat.dim() == 0:
+            y_hat = y_hat.unsqueeze(0)
+            logits = logits.unsqueeze(0)
 
         loss = criterion(logits, labels.float())
 
@@ -448,10 +490,15 @@ def validate(
 
     with torch.no_grad():
         for images, labels in tqdm(val_loader, desc="Validation", leave=False):
-            images = images.to(model.device if hasattr(model, "device") else "cuda")
-            labels = labels.to(model.device if hasattr(model, "device") else "cuda")
+            images = images.to(model.device if hasattr(model, 'device') else 'cuda')
+            labels = labels.to(model.device if hasattr(model, 'device') else 'cuda')
 
             logits, _, y_hat = model(images)
+
+            # Handle single-sample batches
+            if y_hat.dim() == 0:
+                y_hat = y_hat.unsqueeze(0)
+                logits = logits.unsqueeze(0)
 
             loss = criterion(logits, labels.float())
 
@@ -484,10 +531,15 @@ def test(
 
     with torch.no_grad():
         for images, labels, files, coords in tqdm(test_loader, desc="Testing", leave=False):
-            images = images.to(model.device if hasattr(model, "device") else "cuda")
-            labels = labels.to(model.device if hasattr(model, "device") else "cuda")
+            images = images.to(model.device if hasattr(model, 'device') else 'cuda')
+            labels = labels.to(model.device if hasattr(model, 'device') else 'cuda')
 
             logits, y_prob, y_hat = model(images)
+
+            # Handle single-sample batches
+            if y_prob.dim() == 0:
+                y_prob = y_prob.unsqueeze(0)
+                y_hat = y_hat.unsqueeze(0)
 
             for file, coord, label, pred, prob in zip(
                 files,
@@ -511,23 +563,23 @@ def test(
 def train_single_run(
     df: pd.DataFrame,
     args: argparse.Namespace,
-    tumor_type: str,
+    train_size: float,
     run_idx: int,
     seed: int,
     output_dir: Path,
 ) -> None:
-    """Train a single model run for a specific tumor type with a given seed.
+    """Train a single model run with a specific seed and training size.
 
     Args:
-        df (pd.DataFrame): Full dataset with 'tumortype' column.
+        df (pd.DataFrame): Full dataset.
         args (argparse.Namespace): Parsed arguments.
-        tumor_type (str): Tumor type to train on.
+        train_size (float): Fraction of training data to use.
         run_idx (int): Run index for logging.
         seed (int): Random seed.
         output_dir (Path): Directory to save results.
     """
     logger.info("=" * 70)
-    logger.info("Run %d | Seed: %d | Tumor type: %s", run_idx, seed, tumor_type)
+    logger.info("Run %d | Seed: %d | Train size: %.3f", run_idx, seed, train_size)
     logger.info("=" * 70)
 
     # Set seeds
@@ -537,9 +589,7 @@ def train_single_run(
         torch.cuda.manual_seed_all(seed)
 
     # Split dataset
-    train_df, val_df, test_df = split_dataset_by_tumor_type(
-        df, tumor_type, args.test_portion, seed
-    )
+    train_df, val_df, test_df = split_dataset(df, train_size, args.test_portion, seed)
 
     # Assign split labels
     df_copy = df.copy()
@@ -564,6 +614,7 @@ def train_single_run(
     logger.info("Initializing model: %s", args.model_name)
     model = Classifier(args.model_name, args.lora)
     model.to(args.device)
+    print_model_parameters(model, args.model_name)
 
     # Create DataLoaders
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -664,19 +715,25 @@ def train_single_run(
     results_df.to_csv(results_file, index=False)
     logger.info("Test results saved to: %s", results_file)
 
+    # Log class distribution
+    unique, counts = np.unique(train_df["label"], return_counts=True)
+    logger.info("Training class distribution: %s", dict(zip(unique, counts)))
+
 
 def main(args: argparse.Namespace) -> None:
-    """Main training loop across tumor types and seeds.
+    """Main training loop across multiple train sizes and seeds.
 
     Args:
         args (argparse.Namespace): Parsed arguments.
     """
     logger.info("=" * 70)
-    logger.info("Tumor-Specific Training Pipeline")
+    logger.info("Training Pipeline")
     logger.info("=" * 70)
     logger.info("Experiment: %s", args.exp_code)
     logger.info("Model: %s", args.model_name)
     logger.info("Device: %s", args.device)
+    logger.info("Seeds: %s", args.seeds)
+    logger.info("Train sizes: %s", args.train_sizes)
 
     # Set matmul precision for performance
     torch.set_float32_matmul_precision("medium")
@@ -686,32 +743,23 @@ def main(args: argparse.Namespace) -> None:
     df = pd.read_csv(args.path_to_csv_file)
     logger.info("Dataset loaded with %d samples", len(df))
 
-    # Validate dataset
-    if "tumortype" not in df.columns:
-        logger.error("Dataset must contain 'tumortype' column")
-        raise ValueError("Missing required column: 'tumortype'")
-
-    # Get unique tumor types
-    tumor_types = df["tumortype"].unique()
-    logger.info("Found %d tumor types: %s", len(tumor_types), list(tumor_types))
-
     # Save arguments
     exp_dir = Path(args.checkpoint_path) / args.exp_code
     exp_dir.mkdir(parents=True, exist_ok=True)
     save_args_to_yaml(args, exp_dir / "args.yaml")
 
-    # Loop over tumor types
-    for tumor_type in tumor_types:
+    # Loop over training sizes
+    for train_size in args.train_sizes:
         logger.info("-" * 70)
-        logger.info("Training for tumor type: %s", tumor_type)
+        logger.info("Training with %.1f%% of data", train_size * 100)
         logger.info("-" * 70)
 
-        output_dir = exp_dir / tumor_type
+        output_dir = exp_dir / str(train_size)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Loop over seeds
         for run_idx, seed in enumerate(args.seeds):
-            train_single_run(df, args, tumor_type, run_idx, seed, output_dir)
+            train_single_run(df, args, train_size, run_idx, seed, output_dir)
 
     logger.info("=" * 70)
     logger.info("All training runs completed successfully")
