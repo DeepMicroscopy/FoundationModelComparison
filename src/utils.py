@@ -273,11 +273,10 @@ def load_model_and_transforms(model_name: str) -> Tuple[torch.nn.Module, T.Compo
     elif model_name == "virchow":
         model = timm.create_model(
             "hf-hub:paige-ai/Virchow",
-            pretrained=False,
+            pretrained=True,
             mlp_layer=timm.layers.SwiGLUPacked,
             act_layer=torch.nn.SiLU,
         )
-        model.load_state_dict(torch.load("checkpoints/Virchow/pytorch_model.bin"))
         transforms = create_transform(
             **resolve_data_config(model.pretrained_cfg, model=model)
         )
@@ -285,11 +284,10 @@ def load_model_and_transforms(model_name: str) -> Tuple[torch.nn.Module, T.Compo
     elif model_name == "virchow2":
         model = timm.create_model(
             "hf-hub:paige-ai/Virchow2",
-            pretrained=False,
+            pretrained=True,
             mlp_layer=timm.layers.SwiGLUPacked,
             act_layer=torch.nn.SiLU,
         )
-        model.load_state_dict(torch.load("checkpoints/Virchow2/pytorch_model.bin"))
         transforms = create_transform(
             **resolve_data_config(model.pretrained_cfg, model=model)
         )
