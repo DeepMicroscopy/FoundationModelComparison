@@ -146,7 +146,7 @@ dmypy.json
 cython_debug/
 
 # Data science / machine learning
-*.csv
+# *.csv
 *.h5
 *.hdf5
 *.model
