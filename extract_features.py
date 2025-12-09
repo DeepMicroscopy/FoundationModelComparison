@@ -16,8 +16,6 @@ Example:
         --device cuda
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import pickle
@@ -28,7 +26,7 @@ from typing import Any, Dict
 import pandas as pd
 import torch
 
-from MeningiomaDataset.src.classification_dataset import Mitosis_Base_Dataset
+from src.dataset import Mitosis_Base_Dataset
 from src.utils import (
     collate_fn,
     extract_patch_features_from_dataloader,

@@ -156,8 +156,13 @@ def main(args: argparse.Namespace) -> None:
             )
 
             logger.info("_____ seed=%d train_size=%.4f model=%s _____", seed, train_size, model_name)
-            logger.info("---- Linear -----")
-            print_metrics(linprobe_eval_metrics)
+            logger.info("---- Linear probing -----")
+            
+            for k, v in linprobe_eval_metrics.items():
+                if "report" in k:
+                    continue
+                logger.info(f"Test {k}: {v:.3f}")
+
             logger.info("Class counts in training set: %s", np.unique(train_labels, return_counts=True))
 
     save_file = save_dir / f"{model_name}.pkl"

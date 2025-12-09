@@ -22,8 +22,6 @@ Example:
         --model_name resnet50
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import sys
@@ -41,20 +39,20 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms as T
 from tqdm import tqdm
 
-from MeningiomaDataset.src.classification_dataset import Mitosis_Base_Dataset
+from src.dataset import Mitosis_Base_Dataset
 from src.classifier import Classifier
 from src.utils import collate_fn
 
 # Default hyperparameters
-DEFAULT_BATCH_SIZE = 16
-DEFAULT_NUM_WORKERS = 4
-DEFAULT_PATCH_SIZE = 224
-DEFAULT_TEST_PORTION = 0.2
-DEFAULT_PSEUDO_EPOCH_LENGTH = 1280
-DEFAULT_LEARNING_RATE = 1e-4
-DEFAULT_NUM_EPOCHS = 100
-DEFAULT_PATIENCE = 20
-DEFAULT_SEEDS = [42, 43, 44, 45, 46]
+BATCH_SIZE = 16
+NUM_WORKERS = 4
+PATCH_SIZE = 224
+TEST_PORTION = 0.2
+PSEUDO_EPOCH_LENGTH = 1280
+LEARNING_RATE = 1e-4
+NUM_EPOCHS = 100
+PATIENCE = 20
+SEEDS = [42, 43, 44, 45, 46]
 
 # Configure logger
 logging.basicConfig(
@@ -114,49 +112,62 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=DEFAULT_BATCH_SIZE,
-        help=f"Batch size for training (default: {DEFAULT_BATCH_SIZE}).",
+        default=BATCH_SIZE,
+        help=f"Batch size for training (default: {BATCH_SIZE}).",
     )
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=DEFAULT_NUM_EPOCHS,
-        help=f"Number of training epochs (default: {DEFAULT_NUM_EPOCHS}).",
+        default=NUM_EPOCHS,
+        help=f"Number of training epochs (default: {NUM_EPOCHS}).",
     )
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=DEFAULT_LEARNING_RATE,
-        help=f"Learning rate (default: {DEFAULT_LEARNING_RATE}).",
+        default=LEARNING_RATE,
+        help=f"Learning rate (default: {LEARNING_RATE}).",
     )
 
     # Data configuration
     parser.add_argument(
         "--patch_size",
         type=int,
-        default=DEFAULT_PATCH_SIZE,
-        help=f"Patch size in pixels (default: {DEFAULT_PATCH_SIZE}).",
+        default=PATCH_SIZE,
+        help=f"Patch size in pixels (default: {PATCH_SIZE}).",
     )
     parser.add_argument(
         "--test_portion",
         type=float,
-        default=DEFAULT_TEST_PORTION,
-        help=f"Fraction of data to use for testing/validation (default: {DEFAULT_TEST_PORTION}).",
+        default=TEST_PORTION,
+        help=f"Fraction of data to use for testing/validation (default: {TEST_PORTION}).",
     )
     parser.add_argument(
         "--pseudo_epoch_length",
         type=int,
-        default=DEFAULT_PSEUDO_EPOCH_LENGTH,
-        help=f"Number of samples per pseudo-epoch (default: {DEFAULT_PSEUDO_EPOCH_LENGTH}).",
+        default=PSEUDO_EPOCH_LENGTH,
+        help=f"Number of samples per pseudo-epoch (default: {PSEUDO_EPOCH_LENGTH}).",
     )
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=DEFAULT_NUM_WORKERS,
-        help=f"Number of DataLoader workers (default: {DEFAULT_NUM_WORKERS}).",
+        default=NUM_WORKERS,
+        help=f"Number of DataLoader workers (default: {NUM_WORKERS}).",
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        default=SEEDS,
+        help=f"Seeds to indicate how many repititions per configuration (e.g. {SEEDS})."
     )
 
     # Regularization and optimization
+    parser.add_argument(
+        "--augmentation",
+        action="store_true",
+        default=False,
+        help="Enable data augmentation during training.",
+    )
     parser.add_argument(
         "--scheduler",
         action="store_true",
@@ -172,8 +183,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patience",
         type=int,
-        default=DEFAULT_PATIENCE,
-        help=f"Early stopping patience (default: {DEFAULT_PATIENCE}).",
+        default=PATIENCE,
+        help=f"Early stopping patience (default: {PATIENCE}).",
     )
     parser.add_argument(
         "--gradient_clipping",
@@ -294,16 +305,21 @@ def create_dataloaders(
     # Base transform from model
     base_transform = model.input_transform
 
-    # Training augmentations (always enabled for tumor-specific training)
-    train_transform = T.Compose([
-        T.RandomApply([T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)], p=0.5),
-        T.RandomApply([T.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 1.0))], p=0.1),
-        T.RandomHorizontalFlip(p=0.5),
-        T.RandomVerticalFlip(p=0.5),
-        T.RandomApply([T.RandomRotation(degrees=360)], p=0.5),
-        *base_transform.transforms,
-    ])
-    logger.info("Data augmentation enabled for training")
+    # Training augmentations
+    if args.augmentation:
+        train_transform = T.Compose([
+            T.RandomApply([T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)], p=0.5),
+            T.RandomApply([T.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 1.0))], p=0.1),
+            T.RandomHorizontalFlip(p=0.5),
+            T.RandomVerticalFlip(p=0.5),
+            T.RandomApply([T.RandomRotation(degrees=180)], p=0.5),
+            *base_transform.transforms,
+        ])
+        logger.info("Data augmentation enabled")
+    else:
+        train_transform = base_transform
+        logger.info("Data augmentation disabled")
+
 
     # Create datasets
     train_ds = base_dataset.return_split(
@@ -475,7 +491,7 @@ def test(
 
             for file, coord, label, pred, prob in zip(
                 files,
-                coords,
+                coords.cpu().numpy(),
                 labels.cpu().numpy(),
                 y_hat.cpu().numpy(),
                 y_prob.cpu().numpy(),
@@ -694,7 +710,7 @@ def main(args: argparse.Namespace) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Loop over seeds
-        for run_idx, seed in enumerate(DEFAULT_SEEDS):
+        for run_idx, seed in enumerate(args.seeds):
             train_single_run(df, args, tumor_type, run_idx, seed, output_dir)
 
     logger.info("=" * 70)

@@ -18,8 +18,6 @@ Example:
         --train_sizes 0.01,0.1,1.0
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import sys
@@ -37,21 +35,21 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms as T
 from tqdm import tqdm
 
-from MeningiomaDataset.src.classification_dataset import Mitosis_Base_Dataset
+from src.dataset import Mitosis_Base_Dataset
 from src.classifier import Classifier
 from src.utils import collate_fn
 
 # Default hyperparameters
-DEFAULT_BATCH_SIZE = 16
-DEFAULT_NUM_WORKERS = 4
-DEFAULT_PATCH_SIZE = 224
-DEFAULT_TEST_PORTION = 0.2
-DEFAULT_PSEUDO_EPOCH_LENGTH = 1280
-DEFAULT_LEARNING_RATE = 1e-4
-DEFAULT_NUM_EPOCHS = 100
-DEFAULT_PATIENCE = 20
-DEFAULT_TRAIN_SIZES = [0.001, 0.01, 0.1, 1.0]
-DEFAULT_SEEDS = [42, 43, 44, 45, 46]
+BATCH_SIZE = 16
+NUM_WORKERS = 4
+PATCH_SIZE = 224
+TEST_PORTION = 0.2
+PSEUDO_EPOCH_LENGTH = 1280
+LEARNING_RATE = 1e-4
+NUM_EPOCHS = 100
+PATIENCE = 20
+TRAIN_SIZES = [0.001, 0.01, 0.1, 1.0]
+SEEDS = [42, 43, 44, 45, 46]
 
 # Configure logger
 logging.basicConfig(
@@ -111,52 +109,60 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=DEFAULT_BATCH_SIZE,
-        help=f"Batch size for training (default: {DEFAULT_BATCH_SIZE}).",
+        default=BATCH_SIZE,
+        help=f"Batch size for training (default: {BATCH_SIZE}).",
     )
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=DEFAULT_NUM_EPOCHS,
-        help=f"Number of training epochs (default: {DEFAULT_NUM_EPOCHS}).",
+        default=NUM_EPOCHS,
+        help=f"Number of training epochs (default: {NUM_EPOCHS}).",
     )
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=DEFAULT_LEARNING_RATE,
-        help=f"Learning rate (default: {DEFAULT_LEARNING_RATE}).",
+        default=LEARNING_RATE,
+        help=f"Learning rate (default: {LEARNING_RATE}).",
     )
     parser.add_argument(
         "--train_sizes",
-        type=lambda s: [float(x) for x in s.split(",")],
-        default=DEFAULT_TRAIN_SIZES,
-        help=f"Comma-separated list of training data fractions (e.g., {DEFAULT_TRAIN_SIZES}).",
+        nargs="+",
+        type=float,
+        default=TRAIN_SIZES,
+        help=f"Comma-separated list of training data fractions (e.g., {TRAIN_SIZES}).",
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        default=SEEDS,
+        help=f"Seeds to indicate how many repititions per configuration (e.g. {SEEDS})."
     )
 
     # Data configuration
     parser.add_argument(
         "--patch_size",
         type=int,
-        default=DEFAULT_PATCH_SIZE,
-        help=f"Patch size in pixels (default: {DEFAULT_PATCH_SIZE}).",
+        default=PATCH_SIZE,
+        help=f"Patch size in pixels (default: {PATCH_SIZE}).",
     )
     parser.add_argument(
         "--test_portion",
         type=float,
-        default=DEFAULT_TEST_PORTION,
-        help=f"Fraction of data to use for testing (default: {DEFAULT_TEST_PORTION}).",
+        default=TEST_PORTION,
+        help=f"Fraction of data to use for testing (default: {TEST_PORTION}).",
     )
     parser.add_argument(
         "--pseudo_epoch_length",
         type=int,
-        default=DEFAULT_PSEUDO_EPOCH_LENGTH,
-        help=f"Number of samples per pseudo-epoch (default: {DEFAULT_PSEUDO_EPOCH_LENGTH}).",
+        default=PSEUDO_EPOCH_LENGTH,
+        help=f"Number of samples per pseudo-epoch (default: {PSEUDO_EPOCH_LENGTH}).",
     )
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=DEFAULT_NUM_WORKERS,
-        help=f"Number of DataLoader workers (default: {DEFAULT_NUM_WORKERS}).",
+        default=NUM_WORKERS,
+        help=f"Number of DataLoader workers (default: {NUM_WORKERS}).",
     )
 
     # Regularization and optimization
@@ -181,8 +187,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patience",
         type=int,
-        default=DEFAULT_PATIENCE,
-        help=f"Early stopping patience (default: {DEFAULT_PATIENCE}).",
+        default=PATIENCE,
+        help=f"Early stopping patience (default: {PATIENCE}).",
     )
     parser.add_argument(
         "--gradient_clipping",
@@ -343,7 +349,7 @@ def create_dataloaders(
             T.RandomApply([T.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 1.0))], p=0.1),
             T.RandomHorizontalFlip(p=0.5),
             T.RandomVerticalFlip(p=0.5),
-            T.RandomApply([T.RandomRotation(degrees=360)], p=0.5),
+            T.RandomApply([T.RandomRotation(degrees=180)], p=0.5),
             *base_transform.transforms,
         ])
         logger.info("Data augmentation enabled")
@@ -536,7 +542,7 @@ def test(
 
             for file, coord, label, pred, prob in zip(
                 files,
-                coords,
+                coords.cpu().numpy(),
                 labels.cpu().numpy(),
                 y_hat.cpu().numpy(),
                 y_prob.cpu().numpy(),
@@ -725,6 +731,7 @@ def main(args: argparse.Namespace) -> None:
     logger.info("Experiment: %s", args.exp_code)
     logger.info("Model: %s", args.model_name)
     logger.info("Device: %s", args.device)
+    logger.info("Seeds: %s", args.seeds)
     logger.info("Train sizes: %s", args.train_sizes)
 
     # Set matmul precision for performance
@@ -750,7 +757,7 @@ def main(args: argparse.Namespace) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Loop over seeds
-        for run_idx, seed in enumerate(DEFAULT_SEEDS):
+        for run_idx, seed in enumerate(args.seeds):
             train_single_run(df, args, train_size, run_idx, seed, output_dir)
 
     logger.info("=" * 70)
