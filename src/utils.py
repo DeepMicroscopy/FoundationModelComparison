@@ -6,8 +6,6 @@ This module provides:
     - Feature extraction from pretrained models
 """
 
-from __future__ import annotations
-
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np

@@ -6,8 +6,6 @@ This module provides:
     - LoRA (Low-Rank Adaptation) support for efficient fine-tuning
 """
 
-from __future__ import annotations
-
 import os
 from typing import Tuple
 
