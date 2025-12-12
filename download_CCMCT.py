@@ -14,14 +14,16 @@ import argparse
 import json
 import logging 
 import os
+import sys
 import pandas as pd 
 
 
-# Set up logging
+# Configure logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 
 log = logging.getLogger(__name__)
