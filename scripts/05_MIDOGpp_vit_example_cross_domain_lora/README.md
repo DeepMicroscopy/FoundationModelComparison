@@ -1,4 +1,3 @@
-```markdown
 ### Full Example: ViT-S LoRA Fine-tuning in a Cross-Domain Setting on MIDOGpp + Metric Calculation
 
 This example reproduces a full **cross-domain** experiment from the paper, however this is performed on the extended MIDOGpp dataset. It consists of:
@@ -114,4 +113,3 @@ This step:
    ```
 
 This example is intended to reproduce the **cross-domain LoRA fine-tuning** setting and generate a single aggregated metrics file for reporting and comparison.
-```

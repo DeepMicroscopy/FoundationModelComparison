@@ -78,15 +78,15 @@ uv run download_CCMCT.py
 ```
 
 ```bash
-# Download the MIDOG 2022 (png) dataset (not recommended)
+# Download the MIDOG 2022 (png) dataset (not recommended, see below)
 uv run download_MIDOG2022.py
 ```
 
-The experiments in the paper were performed on the .tiff version of the MIDOG 2022 dataset. The .tiff dataset can be downloaded via this google-drive [link](https://drive.google.com/drive/folders/1P73g1xg8jw_JGLJaDFQDnxwQA7ROVykA). If you download the entire folder to `MIDOG2022` you can use the this [script](scripts/01_example_extract_features.sh) to verify that the code runs. 
+The experiments in the paper were performed on the .tiff version of the MIDOG 2022 dataset. The .tiff dataset can be downloaded via this google-drive [link](https://drive.google.com/drive/folders/1P73g1xg8jw_JGLJaDFQDnxwQA7ROVykA).
 
 
 ## Usage examples
-We have provided some database files that were used for our experiments at `databases`. 
+We have provided some examples that can reproduce key experiments of the paper. The examples with descriptions can be found [here](scripts/).
 
 
 ## Citation

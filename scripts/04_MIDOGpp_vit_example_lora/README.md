@@ -122,4 +122,3 @@ Additional artifacts (checkpoints, logs, per-run predictions/metrics) are typica
    ```
 
 This example is intended to reproduce a full fine-tuning experiment with LoRA and produce a single aggregated metrics file suitable for reporting and comparison. 
-```
