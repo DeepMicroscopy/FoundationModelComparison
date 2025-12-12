@@ -28,6 +28,7 @@ def extract_patch_features_from_dataloader(
     """Extract features and labels from images using a pretrained model.
 
     Adapted from the UNI library for feature extraction from histopathology patches.
+    https://github.com/mahmoodlab/UNI/blob/main/uni/downstream/extract_patch_features.py
 
     Args:
         model (torch.nn.Module): Pretrained model for feature extraction.
@@ -131,13 +132,6 @@ def return_forward(model_name: str) -> Callable:
         embeddings = model(batch).detach().cpu()[:remaining, :]
         return embeddings
 
-    def forward_vit_h(model, batch, remaining):
-        """Forward pass for ViT-H (class + mean patch tokens)."""
-        output = model(batch).last_hidden_state.detach().cpu()[:remaining, :]
-        class_token = output[:, 0]
-        patch_tokens = output[:, 1:]
-        embeddings = torch.cat([class_token, patch_tokens.mean(dim=1)], dim=-1)
-        return embeddings
 
     # Map model names to forward functions
     forward_map = {
@@ -149,7 +143,14 @@ def return_forward(model_name: str) -> Callable:
         "resnet50": forward_standard,
         "gigapath": forward_standard,
         "hoptimus": forward_standard,
-        "ViT_H": forward_vit_h,
+        "ViT_H": forward_vit_cls,
+        "ViT_S": forward_standard,
+        "ViT_tiny": forward_vit_cls,
+        "efficientnet_b0": forward_standard,
+        "efficientnet_b3": forward_standard,
+        "efficientnet_b7": forward_standard,
+        "Swin_base": forward_standard,
+        "convnext_base": forward_standard
     }
 
     if model_name not in forward_map:

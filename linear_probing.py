@@ -1,22 +1,29 @@
 import argparse
 import logging
 import pickle
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
 import torch
 
-from UNI.uni.downstream.eval_patch_features.metrics import print_metrics
-from UNI.uni.downstream.eval_patch_features.linear_probe import eval_linear_probe
+from src.metrics import print_metrics
+from src.linear_probe import eval_linear_probe
 
 
 SEEDS = [42, 43, 44, 45, 46]
 TEST_SIZE = 0.2
 TRAIN_SIZES = [0.001, 0.01, 0.1, 1.0]
 
+# Configure logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 logger = logging.getLogger(__name__)
-
 
 def get_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -65,10 +72,6 @@ def get_args() -> argparse.Namespace:
 
 
 def main(args: argparse.Namespace) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    )
 
     model_name: str = args.model_name
     save_dir: Path = args.save_dir

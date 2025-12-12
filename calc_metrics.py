@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from UNI.uni.downstream.eval_patch_features import get_eval_metrics
+from src.metrics import get_eval_metrics
 
 # Configure logger
 logging.basicConfig(

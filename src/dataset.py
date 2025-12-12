@@ -153,7 +153,7 @@ class Mitosis_Base_Dataset(Dataset):
             raise ValueError('Need to provide a path to a valid csv file or a pandas dataframe.')
         
         # check if only 0 and 1 are in the labels 
-        assert self.data.label.unique().tolist() == [0,1], 'Labels need to be 0 and 1'
+        assert sorted(self.data.label.unique().tolist()) == [0,1], 'Labels need to be 0 and 1'
         
         # check image directory
         if not os.path.isdir(image_dir):
@@ -490,7 +490,11 @@ class Mitosis_Test_Dataset(Mitosis_Dataset):
         file, coords, label = sample['file'], sample['coords'], sample['label']
         slide = self.slide_objects[file]
 
-        img = slide.load_image(coords)
+        try:
+            img = slide.load_image(coords)
+        except OSError as e:
+            print(f"[ERROR] Failed to load image for idx={idx}, slide={file}, coords={coords}: {e}")
+            raise
         if self.transforms is not None:
             img = self.transforms(img)
         else:

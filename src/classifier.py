@@ -24,6 +24,7 @@ VALID_LORA_MODULES = {
     "virchow2": ["qkv", "proj", "fc1", "fc2"],
     "virchow": ["qkv", "proj", "fc1", "fc2"],
     "ViT_H": ["query", "key", "value", "dense"],
+    "ViT_S": ["qkv", "proj", "fc1", "fc2"],
     "ViT_S_DINOv3": ["k_proj", "v_proj", "q_proj", "o_proj", "up_proj", "down_proj"],
     "uni": ["qkv", "proj", "fc1", "fc2"],
     "gigapath": ["qkv", "proj", "fc1", "fc2"],
