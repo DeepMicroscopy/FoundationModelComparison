@@ -1,1 +1,0 @@
-uv run extract_features.py --path_to_csv_file databases/MIDOG2022_training_debug.png --image_dir MIDOG2022 --out_path example/linear_probing/features --batch_size 64 --num_workers 8 --model ViT_S
