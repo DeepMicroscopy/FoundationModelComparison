@@ -1,6 +1,6 @@
 # Benchmarking Foundation Models for Mitotic Figure Classification
 
-This repository will host the code that was used for our paper [Benchmarking Foundation Models for Mitotic Figure Classification](https://arxiv.org/abs/2508.04441).
+This repository hosts the code that was used for our paper [Benchmarking Foundation Models for Mitotic Figure Classification](https://arxiv.org/abs/2508.04441).
 
 ## Abstract 
 The performance of deep learning models is known to scale with data quantity and diversity. In pathology, as in many other medical imaging domains, the availability of labeled images for a specific task is often limited. Self-supervised learning techniques have enabled the use of vast amounts of unlabeled data to train large-scale neural networks, i.e., foundation models, that can address the limited data problem by providing semantically rich feature vectors that can generalize well to new tasks with minimal training effort increasing model performance and robustness. In this work, we investigate the use of foundation models for mitotic figure classification. The mitotic count, which can be derived from this classification task, is an independent prognostic marker for specific tumors and part of certain tumor grading systems. In particular, we investigate the data scaling laws on multiple current foundation models and evaluate their robustness to unseen tumor domains. Next to the commonly used linear probing paradigm, we also adapt the models using low-rank adaptation (LoRA) of their attention mechanisms. We compare all models against end-to-end-trained baselines, both CNNs and Vision Transformers. Our results demonstrate that LoRA-adapted foundation models provide superior performance to those adapted with standard linear probing, reaching performance levels close to 100 % data availability with only 10 % of training data. Furthermore, LoRA-adaptation of the most recent foundation models almost closes the out-of-domain performance gap when evaluated on unseen tumor domains. However, full fine-tuning of traditional architectures still yields competitive performance.
@@ -65,11 +65,11 @@ The repository contins the following main scripts for reproducing the experiment
 - `databases/`: Contains some database files that were used in our paper. 
 
 ## Getting the data
-When you setup the environment as described above you can download the images of the MIDOG 2022 (png) dataset or the CCMCT dataset by the following commands:
+When you setup the environment as described above you can download the images of the MIDOGpp dataset, the MIDOG2022 dataset or the CCMCT dataset by one of the following commands:
 
 ```bash
-# Download the MIDOG 2022 dataset (png)
-uv run download_MIDOG2022.py
+# Download the MIDOG++
+uv run download_MIDOGpp.py
 ```
 
 ```bash
@@ -77,7 +77,12 @@ uv run download_MIDOG2022.py
 uv run download_CCMCT.py
 ```
 
-The experiments in the paper were performed on the .tiff version of the MIDOG 2022 dataset. The .tiff dataset can be downloaded via this google-drive [link](https://drive.google.com/drive/folders/1P73g1xg8jw_JGLJaDFQDnxwQA7ROVykA). We provide database files that work with both versions.  
+```bash
+# Download the MIDOG 2022 (png) dataset (not recommended)
+uv run download_MIDOG2022.py
+```
+
+The experiments in the paper were performed on the .tiff version of the MIDOG 2022 dataset. The .tiff dataset can be downloaded via this google-drive [link](https://drive.google.com/drive/folders/1P73g1xg8jw_JGLJaDFQDnxwQA7ROVykA). If you download the entire folder to `MIDOG2022` you can use the this [script](scripts/01_example_extract_features.sh) to verify that the code runs. 
 
 
 ## Usage examples
